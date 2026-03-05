@@ -26,16 +26,31 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libopencv-dev build-essential debhelper devscripts
+          sudo apt-get install -y libopencv-dev build-essential debhelper devscripts libgtest-dev openimageio-tools
       
-      - name: Build binary, .deb and appimage
+      - name: Build and Test
         run: |
           cd focus-stack
           # Set dummy email/name for dch
           export DEBEMAIL="user@example.com"
           export DEBFULLNAME="User"
+          
+          echo "::group::Build"
           make
+          echo "::endgroup::"
+          
+          echo "::group::Run Unit Tests"
+          make run_unittests
+          echo "::endgroup::"
+          
+          echo "::group::Run Integration Tests"
+          make run_tests
+          echo "::endgroup::"
+          
+          echo "::group::Build Debian Package"
           make builddeb
+          echo "::endgroup::"
+          
           # Only build AppImage once (on 22.04) as it's meant to be portable
           if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
             make build/focus-stack.AppImage
