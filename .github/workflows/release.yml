@@ -10,8 +10,11 @@ on:
 
 jobs:
   linux_binary:
-    name: Build binary on Ubuntu 22.04
-    runs-on: ubuntu-22.04
+    name: Build binary on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
     
     steps:
       - name: Check out code from GitHub
@@ -23,32 +26,33 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install libopencv-dev build-essential debhelper devscripts
+          sudo apt-get install -y libopencv-dev build-essential debhelper devscripts
       
       - name: Build binary, .deb and appimage
         run: |
           cd focus-stack
+          # Set dummy email/name for dch
+          export DEBEMAIL="user@example.com"
+          export DEBFULLNAME="User"
           make
           make builddeb
-          make build/focus-stack.AppImage
+          # Only build AppImage once (on 22.04) as it's meant to be portable
+          if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            make build/focus-stack.AppImage
+          fi
     
       - name: Upload deb
         uses: actions/upload-artifact@v4
         with:
           path: focus-stack/DEBUILD/*.deb
-          name: Focus-stack Ubuntu 20.04 package
-      
-      - name: Upload ddeb
-        uses: actions/upload-artifact@v4
-        with:
-          path: focus-stack/DEBUILD/*.ddeb
-          name: Focus-stack Ubuntu 20.04 debug symbols
+          name: focus-stack-${{ matrix.os }}-package
 
       - name: Upload appimage
+        if: matrix.os == 'ubuntu-22.04'
         uses: actions/upload-artifact@v4
         with:
           path: focus-stack/build/focus-stack.AppImage
-          name: Focus-stack Linux x86_64 AppImage
+          name: focus-stack-linux-x86_64-appimage
 
   mac_binary:
     name: Build binary on Mac OS X 14
@@ -75,7 +79,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: focus-stack/distrib/focus-stack_MacOSX.zip
-          name: Focus-stack Mac OS X application
+          name: focus-stack-macos-application
 
   windows_binary:
     name: Build binary on Windows 2022
@@ -128,13 +132,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           path: focus-stack/distrib/*.zip
-          name: Focus-stack Windows binary
-
-      - name: Upload debug symbols
-        uses: actions/upload-artifact@v4
-        with:
-          path: focus-stack/build/*.pdb
-          name: Focus-stack Windows debug symbols
+          name: focus-stack-windows-binary
 
   release:
     needs: [linux_binary, mac_binary, windows_binary]
@@ -150,10 +148,12 @@ jobs:
         run: |
           mkdir -p focus-stack/distrib
           cd focus-stack/distrib
-          gh run --repo ${GITHUB_REPOSITORY} download -n 'Focus-stack Mac OS X application'
-          gh run --repo ${GITHUB_REPOSITORY} download -n 'Focus-stack Ubuntu 20.04 package'
-          gh run --repo ${GITHUB_REPOSITORY} download -n 'Focus-stack Linux x86_64 AppImage'
-          gh run --repo ${GITHUB_REPOSITORY} download -n 'Focus-stack Windows binary'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-macos-application'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-ubuntu-20.04-package'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-ubuntu-22.04-package'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-ubuntu-24.04-package'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-linux-x86_64-appimage'
+          gh run --repo ${GITHUB_REPOSITORY} download -n 'focus-stack-windows-binary'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
@@ -167,7 +167,7 @@ jobs:
         if: github.ref == 'refs/heads/master'
         run: |
           cd focus-stack
-          git tag -d latest
+          git tag -d latest || true
           git tag latest
           git push origin --force latest
           cd distrib
