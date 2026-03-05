@@ -6,3 +6,4 @@ build
 gitrev
 Makefile.local
 .vs/
+DEBUILD/
